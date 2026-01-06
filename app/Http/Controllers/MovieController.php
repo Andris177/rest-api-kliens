@@ -10,30 +10,29 @@ use Barryvdh\DomPDF\Facade\Pdf;
 class MovieController extends Controller
 {
     public function index(Request $request)
-{
-    $needle = $request->get('needle');
+    {
+        $needle = $request->get('needle');
 
-    $query = [];
-    if ($needle) $query['needle'] = $needle;
+        $query = [];
+        if ($needle) $query['needle'] = $needle;
 
-    $response = Http::api()->get('movies', $query);
+        $response = Http::api()->get('movies', $query);
 
-    if ($response->failed()) {
-        return back()->with('error', $response->json('message') ?? 'API hiba');
+        if ($response->failed()) {
+            return back()->with('error', $response->json('message') ?? 'API hiba');
+        }
+
+        $movies = $response->json('movies') ?? [];
+
+        return view('movies.index', [
+            'movies' => $movies,
+            'needle' => $needle,
+            'isAuthenticated' => $this->isAuthenticated(),
+        ]);
     }
-
-    $movies = $response->json('movies') ?? [];   // <-- EZ A FONTOS
-
-    return view('movies.index', [
-        'movies' => $movies,
-        'needle' => $needle,
-        'isAuthenticated' => $this->isAuthenticated(),
-    ]);
-}
 
     public function create()
     {
-        // dropdownokhoz
         $categories = $this->fetchCategories();
         $directors  = $this->fetchDirectors();
 
@@ -47,7 +46,7 @@ class MovieController extends Controller
             'description' => ['nullable', 'string'],
             'cover_image' => ['nullable', 'string', 'max:255'],
             'category_id' => ['nullable', 'integer'],
-            'director_id' => ['required', 'integer'], // ha nálad nem kötelező, átírod nullable-ra
+            'director_id' => ['required', 'integer'],
         ]);
 
         try {
@@ -69,14 +68,13 @@ class MovieController extends Controller
     public function edit($id)
     {
         try {
-            // ha nincs show endpoint, listából keressük
             $response = Http::api()->get('movies');
 
             if ($response->failed()) {
                 return redirect()->route('movies.index')->with('error', 'Nem sikerült lekérdezni a filmeket.');
             }
 
-            $movies = $response->json() ?? [];
+            $movies = $response->json('movies') ?? [];
             $movie  = collect($movies)->firstWhere('id', (int)$id);
 
             if (!$movie) {
@@ -103,7 +101,7 @@ class MovieController extends Controller
         ]);
 
         try {
-            // ha a REST API PATCH-et vár, ezt cseréld patch()-re
+            // API oldalon PATCH van, ezért itt PATCH maradjon
             $response = Http::api()
                 ->withToken($this->token)
                 ->patch("movies/{$id}", $validated);
@@ -146,15 +144,18 @@ class MovieController extends Controller
                 return redirect()->route('movies.index')->with('error', 'Nem sikerült exportálni CSV-be.');
             }
 
-            $movies = $response->json() ?? [];
+            $movies = $response->json('movies') ?? [];
 
             $headers = [
-                'Content-Type'        => 'text/csv',
+                'Content-Type'        => 'text/csv; charset=UTF-8',
                 'Content-Disposition' => 'attachment; filename="movies.csv"',
             ];
 
             $callback = function () use ($movies) {
                 $handle = fopen('php://output', 'w');
+                // BOM Excelhez
+                fprintf($handle, chr(0xEF).chr(0xBB).chr(0xBF));
+
                 fputcsv($handle, ['ID', 'Title', 'Description', 'Cover image', 'Category ID', 'Director ID']);
 
                 foreach ($movies as $m) {
@@ -186,7 +187,7 @@ class MovieController extends Controller
                 return redirect()->route('movies.index')->with('error', 'Nem sikerült exportálni PDF-be.');
             }
 
-            $movies = $response->json() ?? [];
+            $movies = $response->json('movies') ?? [];
 
             $pdf = Pdf::loadView('exports.movies_pdf', [
                 'movies' => $movies,
@@ -203,7 +204,7 @@ class MovieController extends Controller
         try {
             $r = Http::api()->get('categories');
             if ($r->failed()) return [];
-            return $r->json() ?? [];
+            return $r->json('categories') ?? [];
         } catch (\Exception $e) {
             return [];
         }
@@ -214,7 +215,7 @@ class MovieController extends Controller
         try {
             $r = Http::api()->get('directors');
             if ($r->failed()) return [];
-            return $r->json() ?? [];
+            return $r->json('directors') ?? [];
         } catch (\Exception $e) {
             return [];
         }

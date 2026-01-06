@@ -1,54 +1,55 @@
-@extends('layouts.app')
+<x-app-layout>
+    <x-slot name="header">
+        <h2 class="text-xl font-semibold">Új színész</h2>
+    </x-slot>
 
-@section('content')
-<div class="container mx-auto mt-4">
-    <h1>Új színész</h1>
+    <div class="p-6 max-w-3xl">
+        @if ($errors->any())
+            <div class="mb-4 border border-red-300 bg-red-50 p-4">
+                <ul class="list-disc pl-5 text-red-700">
+                    @foreach ($errors->all() as $error)
+                        <li>{{ $error }}</li>
+                    @endforeach
+                </ul>
+            </div>
+        @endif
 
-    @if ($errors->any())
-        <div class="alert alert-danger">
-            <ul class="mb-0">
-                @foreach ($errors->all() as $error)
-                    <li>{{ $error }}</li>
-                @endforeach
-            </ul>
-        </div>
-    @endif
+        <form action="{{ route('actors.store') }}" method="POST" class="space-y-4">
+            @csrf
 
-    <form action="{{ route('actors.store') }}" method="POST">
-        @csrf
+            <div>
+                <label class="block font-medium mb-1">Név</label>
+                <input type="text" name="name" class="border p-2 w-full" value="{{ old('name') }}" required>
+            </div>
 
-        <div class="mb-3">
-            <label class="form-label">Név</label>
-            <input type="text" name="name" class="form-control" value="{{ old('name') }}" required>
-        </div>
+            <div>
+                <label class="block font-medium mb-1">Leírás</label>
+                <textarea name="description" class="border p-2 w-full" rows="4">{{ old('description') }}</textarea>
+            </div>
 
-        <div class="mb-3">
-            <label class="form-label">Leírás</label>
-            <textarea name="description" class="form-control">{{ old('description') }}</textarea>
-        </div>
+            <div>
+                <label class="block font-medium mb-1">Születési dátum</label>
+                <input type="date" name="birth_date" class="border p-2 w-full" value="{{ old('birth_date') }}">
+            </div>
 
-        <div class="mb-3">
-            <label class="form-label">Születési dátum</label>
-            <input type="date" name="birth_date" class="form-control" value="{{ old('birth_date') }}">
-        </div>
+            <div>
+                <label class="block font-medium mb-1">Nem</label>
+                <select name="gender" class="border p-2 w-full" required>
+                    <option value="">-- Válassz --</option>
+                    <option value="férfi" {{ old('gender') === 'férfi' ? 'selected' : '' }}>Férfi</option>
+                    <option value="nő" {{ old('gender') === 'nő' ? 'selected' : '' }}>Nő</option>
+                </select>
+            </div>
 
-        <div class="mb-3">
-            <label class="form-label">Nem</label>
-            <select name="gender" class="form-select" required>
-                <option value="">-- Válassz --</option>
-                <option value="male" {{ old('gender') === 'male' ? 'selected' : '' }}>Férfi</option>
-                <option value="female" {{ old('gender') === 'female' ? 'selected' : '' }}>Nő</option>
-                <option value="other" {{ old('gender') === 'other' ? 'selected' : '' }}>Egyéb</option>
-            </select>
-        </div>
+            <div>
+                <label class="block font-medium mb-1">Kép (URL vagy fájlnév)</label>
+                <input type="text" name="image" class="border p-2 w-full" value="{{ old('image') }}">
+            </div>
 
-        <div class="mb-3">
-            <label class="form-label">Kép (URL vagy fájlnév)</label>
-            <input type="text" name="image" class="form-control" value="{{ old('image') }}">
-        </div>
-
-        <button type="submit" class="btn btn-primary">Mentés</button>
-        <a href="{{ route('actors.index') }}" class="btn btn-secondary">Mégse</a>
-    </form>
-</div>
-@endsection
+            <div class="flex gap-3">
+                <button type="submit" class="bg-green-600 text-white px-4 py-2">Mentés</button>
+                <a href="{{ route('actors.index') }}" class="bg-gray-600 text-white px-4 py-2">Mégse</a>
+            </div>
+        </form>
+    </div>
+</x-app-layout>

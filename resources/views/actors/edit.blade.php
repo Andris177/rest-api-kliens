@@ -1,58 +1,60 @@
-@extends('layouts.app')
+<x-app-layout>
+    <x-slot name="header">
+        <h2 class="text-xl font-semibold">Színész szerkesztése</h2>
+    </x-slot>
 
-@section('content')
-<div class="container mx-auto mt-4">
-    <h1>Színész szerkesztése</h1>
+    <div class="p-6 max-w-3xl">
+        @if ($errors->any())
+            <div class="mb-4 border border-red-300 bg-red-50 p-4">
+                <ul class="list-disc pl-5 text-red-700">
+                    @foreach ($errors->all() as $error)
+                        <li>{{ $error }}</li>
+                    @endforeach
+                </ul>
+            </div>
+        @endif
 
-    @if ($errors->any())
-        <div class="alert alert-danger">
-            <ul class="mb-0">
-                @foreach ($errors->all() as $error)
-                    <li>{{ $error }}</li>
-                @endforeach
-            </ul>
-        </div>
-    @endif
+        <form action="{{ route('actors.update', $actor['id']) }}" method="POST" class="space-y-4">
+            @csrf
+            @method('PUT')
 
-    <form action="{{ route('actors.update', $actor['id']) }}" method="POST">
-        @csrf
-        @method('PUT')
+            <div>
+                <label class="block font-medium mb-1">Név</label>
+                <input type="text" name="name" class="border p-2 w-full"
+                       value="{{ old('name', $actor['name'] ?? '') }}" required>
+            </div>
 
-        <div class="mb-3">
-            <label class="form-label">Név</label>
-            <input type="text" name="name" class="form-control"
-                   value="{{ old('name', $actor['name'] ?? '') }}" required>
-        </div>
+            <div>
+                <label class="block font-medium mb-1">Leírás</label>
+                <textarea name="description" class="border p-2 w-full" rows="4">{{ old('description', $actor['description'] ?? '') }}</textarea>
+            </div>
 
-        <div class="mb-3">
-            <label class="form-label">Leírás</label>
-            <textarea name="description" class="form-control">{{ old('description', $actor['description'] ?? '') }}</textarea>
-        </div>
+            <div>
+                <label class="block font-medium mb-1">Születési dátum</label>
+                <input type="date" name="birth_date" class="border p-2 w-full"
+                       value="{{ old('birth_date', $actor['birth_date'] ?? '') }}">
+            </div>
 
-        <div class="mb-3">
-            <label class="form-label">Születési dátum</label>
-            <input type="date" name="birth_date" class="form-control"
-                   value="{{ old('birth_date', $actor['birth_date'] ?? '') }}">
-        </div>
-
-        <div class="mb-3">
-            <label class="form-label">Nem</label>
-            <select name="gender" class="form-select" required>
+            <div>
+                <label class="block font-medium mb-1">Nem</label>
                 @php $gender = old('gender', $actor['gender'] ?? ''); @endphp
-                <option value="male" {{ $gender === 'male' ? 'selected' : '' }}>Férfi</option>
-                <option value="female" {{ $gender === 'female' ? 'selected' : '' }}>Nő</option>
-                <option value="other" {{ $gender === 'other' ? 'selected' : '' }}>Egyéb</option>
-            </select>
-        </div>
+                <select name="gender" class="border p-2 w-full" required>
+                    <option value="">-- Válassz --</option>
+                    <option value="férfi" {{ $gender === 'férfi' ? 'selected' : '' }}>Férfi</option>
+                    <option value="nő" {{ $gender === 'nő' ? 'selected' : '' }}>Nő</option>
+                </select>
+            </div>
 
-        <div class="mb-3">
-            <label class="form-label">Kép (URL vagy fájlnév)</label>
-            <input type="text" name="image" class="form-control"
-                   value="{{ old('image', $actor['image'] ?? '') }}">
-        </div>
+            <div>
+                <label class="block font-medium mb-1">Kép (URL vagy fájlnév)</label>
+                <input type="text" name="image" class="border p-2 w-full"
+                       value="{{ old('image', $actor['image'] ?? '') }}">
+            </div>
 
-        <button type="submit" class="btn btn-primary">Mentés</button>
-        <a href="{{ route('actors.index') }}" class="btn btn-secondary">Mégse</a>
-    </form>
-</div>
-@endsection
+            <div class="flex gap-3">
+                <button type="submit" class="bg-blue-600 text-white px-4 py-2">Mentés</button>
+                <a href="{{ route('actors.index') }}" class="bg-gray-600 text-white px-4 py-2">Mégse</a>
+            </div>
+        </form>
+    </div>
+</x-app-layout>

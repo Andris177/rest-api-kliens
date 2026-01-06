@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use Barryvdh\DomPDF\Facade\Pdf;
 
 class DirectorController extends Controller
@@ -15,28 +16,24 @@ class DirectorController extends Controller
     {
         $needle = $request->get('needle');
 
-        try {
-            $query = [];
-            if ($needle) {
-                $query['needle'] = $needle;
-            }
-
-            $response = Http::api()->get('/directors', $query);
-
-            if ($response->failed()) {
-                return back()->with('error', 'Nem sikerült lekérdezni a rendezőket.');
-            }
-
-            $directors = $response->json() ?? [];
-
-            return view('directors.index', [
-                'directors' => $directors,
-                'needle' => $needle,
-                'isAuthenticated' => $this->isAuthenticated(),
-            ]);
-        } catch (\Exception $e) {
-            return back()->with('error', $e->getMessage());
+        $query = [];
+        if ($needle) {
+            $query['needle'] = $needle;
         }
+
+        $response = Http::api()->get('directors', $query);
+
+        if ($response->failed()) {
+            return back()->with('error', $response->json('message') ?? 'Hiba');
+        }
+
+        $directors = $response->json('directors') ?? [];
+
+        return view('directors.index', [
+            'directors' => $directors,
+            'needle' => $needle,
+            'isAuthenticated' => $this->isAuthenticated(),
+        ]);
     }
 
     /**
@@ -59,18 +56,16 @@ class DirectorController extends Controller
         try {
             $response = Http::api()
                 ->withToken($this->token)
-                ->post('/directors', $validated);
+                ->post('directors', $validated);
 
             if ($response->failed()) {
-                return redirect()->route('directors.index')
-                    ->with('error', 'Nem sikerült létrehozni a rendezőt.');
+                $msg = $response->json('message') ?? 'Nem sikerült létrehozni a rendezőt.';
+                return redirect()->route('directors.index')->with('error', $msg);
             }
 
-            return redirect()->route('directors.index')
-                ->with('success', 'Rendező sikeresen létrehozva.');
+            return redirect()->route('directors.index')->with('success', 'Rendező sikeresen létrehozva.');
         } catch (\Exception $e) {
-            return redirect()->route('directors.index')
-                ->with('error', $e->getMessage());
+            return redirect()->route('directors.index')->with('error', $e->getMessage());
         }
     }
 
@@ -80,16 +75,15 @@ class DirectorController extends Controller
     public function edit($id)
     {
         try {
-            // NOTE: nincs GET /directors/{id} végpont → listából választunk
-            $response = Http::api()->get('/directors');
+            $response = Http::api()->get('directors');
 
             if ($response->failed()) {
                 return redirect()->route('directors.index')
                     ->with('error', 'Nem sikerült lekérdezni a rendezőket.');
             }
 
-            $directors = $response->json() ?? [];
-            $director = collect($directors)->firstWhere('id', (int)$id);
+            $directors = $response->json('directors') ?? [];
+            $director = collect($directors)->firstWhere('id', (int) $id);
 
             if (!$director) {
                 return redirect()->route('directors.index')
@@ -98,8 +92,7 @@ class DirectorController extends Controller
 
             return view('directors.edit', ['director' => $director]);
         } catch (\Exception $e) {
-            return redirect()->route('directors.index')
-                ->with('error', $e->getMessage());
+            return redirect()->route('directors.index')->with('error', $e->getMessage());
         }
     }
 
@@ -115,18 +108,16 @@ class DirectorController extends Controller
         try {
             $response = Http::api()
                 ->withToken($this->token)
-                ->patch("/directors/{$id}", $validated);
+                ->patch("directors/{$id}", $validated);
 
             if ($response->failed()) {
-                return redirect()->route('directors.index')
-                    ->with('error', 'Nem sikerült frissíteni a rendezőt.');
+                $msg = $response->json('message') ?? 'Nem sikerült frissíteni a rendezőt.';
+                return redirect()->route('directors.index')->with('error', $msg);
             }
 
-            return redirect()->route('directors.index')
-                ->with('success', 'Rendező sikeresen frissítve.');
+            return redirect()->route('directors.index')->with('success', 'Rendező sikeresen frissítve.');
         } catch (\Exception $e) {
-            return redirect()->route('directors.index')
-                ->with('error', $e->getMessage());
+            return redirect()->route('directors.index')->with('error', $e->getMessage());
         }
     }
 
@@ -138,35 +129,32 @@ class DirectorController extends Controller
         try {
             $response = Http::api()
                 ->withToken($this->token)
-                ->delete("/directors/{$id}");
+                ->delete("directors/{$id}");
 
             if ($response->failed()) {
-                return redirect()->route('directors.index')
-                    ->with('error', 'Nem sikerült törölni a rendezőt.');
+                $msg = $response->json('message') ?? 'Nem sikerült törölni a rendezőt.';
+                return redirect()->route('directors.index')->with('error', $msg);
             }
 
-            return redirect()->route('directors.index')
-                ->with('success', 'Rendező sikeresen törölve.');
+            return redirect()->route('directors.index')->with('success', 'Rendező sikeresen törölve.');
         } catch (\Exception $e) {
-            return redirect()->route('directors.index')
-                ->with('error', $e->getMessage());
+            return redirect()->route('directors.index')->with('error', $e->getMessage());
         }
     }
 
     /**
      * CSV export
      */
-    public function exportCsv()
+    public function exportCsv(): StreamedResponse
     {
         try {
-            $response = Http::api()->get('/directors');
+            $response = Http::api()->get('directors');
 
             if ($response->failed()) {
-                return redirect()->route('directors.index')
-                    ->with('error', 'Nem sikerült exportálni.');
+                return redirect()->route('directors.index')->with('error', 'Nem sikerült exportálni.');
             }
 
-            $directors = $response->json() ?? [];
+            $directors = $response->json('directors') ?? [];
 
             $headers = [
                 'Content-Type' => 'text/csv; charset=UTF-8',
@@ -175,13 +163,16 @@ class DirectorController extends Controller
 
             $callback = function () use ($directors) {
                 $handle = fopen('php://output', 'w');
-                fprintf($handle, chr(0xEF).chr(0xBB).chr(0xBF));
+
+                // UTF-8 BOM Excel miatt
+                fprintf($handle, chr(0xEF) . chr(0xBB) . chr(0xBF));
+
                 fputcsv($handle, ['ID', 'Name']);
 
-                foreach ($directors as $director) {
+                foreach ($directors as $d) {
                     fputcsv($handle, [
-                        $director['id'] ?? '',
-                        $director['name'] ?? '',
+                        $d['id'] ?? '',
+                        $d['name'] ?? '',
                     ]);
                 }
 
@@ -190,8 +181,7 @@ class DirectorController extends Controller
 
             return response()->stream($callback, 200, $headers);
         } catch (\Exception $e) {
-            return redirect()->route('directors.index')
-                ->with('error', $e->getMessage());
+            return redirect()->route('directors.index')->with('error', $e->getMessage());
         }
     }
 
@@ -201,14 +191,13 @@ class DirectorController extends Controller
     public function exportPdf()
     {
         try {
-            $response = Http::api()->get('/directors');
+            $response = Http::api()->get('directors');
 
             if ($response->failed()) {
-                return redirect()->route('directors.index')
-                    ->with('error', 'Nem sikerült PDF-et készíteni.');
+                return redirect()->route('directors.index')->with('error', 'Nem sikerült PDF-et készíteni.');
             }
 
-            $directors = $response->json() ?? [];
+            $directors = $response->json('directors') ?? [];
 
             $pdf = Pdf::loadView('exports.directors_pdf', [
                 'directors' => $directors,
@@ -216,8 +205,7 @@ class DirectorController extends Controller
 
             return $pdf->download('directors.pdf');
         } catch (\Exception $e) {
-            return redirect()->route('directors.index')
-                ->with('error', $e->getMessage());
+            return redirect()->route('directors.index')->with('error', $e->getMessage());
         }
     }
 }

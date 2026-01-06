@@ -4,13 +4,11 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use Barryvdh\DomPDF\Facade\Pdf;
 
 class ActorController extends Controller
 {
-    /**
-     * Lista + keresés (nyitott)
-     */
     public function index(Request $request)
     {
         $needle = $request->get('needle');
@@ -21,18 +19,19 @@ class ActorController extends Controller
                 $query['needle'] = $needle;
             }
 
-            $response = Http::api()->get('/actors', $query);
+            $response = Http::api()->get('actors', $query);
 
             if ($response->failed()) {
                 $message = $response->json('message') ?? 'Ismeretlen hiba történt az API hívás során.';
                 return back()->with('error', $message);
             }
 
-            $actors = $response->json() ?? [];
+            // ✅ FONTOS: wrapperből a listát!
+            $actors = $response->json('actors') ?? [];
 
             return view('actors.index', [
-                'actors' => $actors,
-                'needle' => $needle,
+                'actors'          => $actors,
+                'needle'          => $needle,
                 'isAuthenticated' => $this->isAuthenticated(),
             ]);
         } catch (\Exception $e) {
@@ -40,187 +39,148 @@ class ActorController extends Controller
         }
     }
 
-    /**
-     * Új színész űrlap (auth middleware védi)
-     */
     public function create()
     {
+        if (!$this->isAuthenticated()) {
+            return redirect()->route('actors.index')->with('error', 'Az adatmódosításhoz be kell jelentkezni.');
+        }
+
         return view('actors.create');
     }
 
-    /**
-     * Új színész mentése (auth middleware védi)
-     */
     public function store(Request $request)
     {
+        if (!$this->isAuthenticated()) {
+            return redirect()->route('actors.index')->with('error', 'Az adatmódosításhoz be kell jelentkezni.');
+        }
+
         $validated = $request->validate([
             'name'        => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
             'birth_date'  => ['nullable', 'date'],
-            'gender'      => ['required', 'in:male,female,other'],
+            'gender'      => ['nullable', 'in:férfi,nő'],
             'image'       => ['nullable', 'string', 'max:255'],
         ]);
 
-        try {
-            $response = Http::api()
-                ->withToken($this->token)
-                ->post('/actors', $validated);
+        $response = Http::api()->withToken($this->token)->post('actors', $validated);
 
-            if ($response->failed()) {
-                $message = $response->json('message') ?? 'Nem sikerült létrehozni a színészt.';
-                return redirect()->route('actors.index')->with('error', $message);
-            }
-
-            return redirect()->route('actors.index')->with('success', 'Színész sikeresen létrehozva.');
-        } catch (\Exception $e) {
-            return redirect()->route('actors.index')->with('error', 'Hiba az API hívás során: ' . $e->getMessage());
+        if ($response->failed()) {
+            return redirect()->route('actors.index')->with('error', $response->json('message') ?? 'Nem sikerült létrehozni.');
         }
+
+        return redirect()->route('actors.index')->with('success', 'Színész sikeresen létrehozva.');
     }
 
-    /**
-     * Szerkesztő űrlap (auth middleware védi)
-     */
     public function edit($id)
     {
-        try {
-            // NOTE: Az API jelenleg nem biztosít GET /actors/{id} végpontot,
-            // ezért a teljes lista lekéréséből választjuk ki a kért elemet.
-            $response = Http::api()->get('/actors');
-
-            if ($response->failed()) {
-                return redirect()->route('actors.index')->with('error', 'Nem sikerült lekérdezni a színészeket.');
-            }
-
-            $actors = $response->json() ?? [];
-            $actor  = collect($actors)->firstWhere('id', (int) $id);
-
-            if (!$actor) {
-                return redirect()->route('actors.index')->with('error', 'A megadott színész nem található.');
-            }
-
-            return view('actors.edit', ['actor' => $actor]);
-        } catch (\Exception $e) {
-            return redirect()->route('actors.index')->with('error', 'Hiba történt: ' . $e->getMessage());
+        if (!$this->isAuthenticated()) {
+            return redirect()->route('actors.index')->with('error', 'Az adatmódosításhoz be kell jelentkezni.');
         }
+
+        $response = Http::api()->get('actors');
+        if ($response->failed()) {
+            return redirect()->route('actors.index')->with('error', 'Nem sikerült lekérdezni a színészeket.');
+        }
+
+        $actors = $response->json('actors') ?? [];
+        $actor = collect($actors)->firstWhere('id', (int)$id);
+
+        if (!$actor) {
+            return redirect()->route('actors.index')->with('error', 'A megadott színész nem található.');
+        }
+
+        return view('actors.edit', ['actor' => $actor]);
     }
 
-    /**
-     * Színész módosítása (auth middleware védi)
-     */
     public function update(Request $request, $id)
     {
+        if (!$this->isAuthenticated()) {
+            return redirect()->route('actors.index')->with('error', 'Az adatmódosításhoz be kell jelentkezni.');
+        }
+
         $validated = $request->validate([
             'name'        => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
             'birth_date'  => ['nullable', 'date'],
-            'gender'      => ['required', 'in:male,female,other'],
+            'gender'      => ['nullable', 'in:férfi,nő'],
             'image'       => ['nullable', 'string', 'max:255'],
         ]);
 
-        try {
-            $response = Http::api()
-                ->withToken($this->token)
-                ->patch("/actors/{$id}", $validated);
+        $response = Http::api()->withToken($this->token)->patch("actors/{$id}", $validated);
 
-            if ($response->failed()) {
-                $message = $response->json('message') ?? 'Nem sikerült frissíteni a színészt.';
-                return redirect()->route('actors.index')->with('error', $message);
-            }
-
-            return redirect()->route('actors.index')->with('success', 'Színész sikeresen frissítve.');
-        } catch (\Exception $e) {
-            return redirect()->route('actors.index')->with('error', 'Hiba az API hívás során: ' . $e->getMessage());
+        if ($response->failed()) {
+            return redirect()->route('actors.index')->with('error', $response->json('message') ?? 'Nem sikerült frissíteni.');
         }
+
+        return redirect()->route('actors.index')->with('success', 'Színész sikeresen frissítve.');
     }
 
-    /**
-     * Színész törlése (auth middleware védi)
-     */
     public function destroy($id)
     {
-        try {
-            $response = Http::api()
-                ->withToken($this->token)
-                ->delete("/actors/{$id}");
-
-            if ($response->failed()) {
-                $message = $response->json('message') ?? 'Nem sikerült törölni a színészt.';
-                return redirect()->route('actors.index')->with('error', $message);
-            }
-
-            return redirect()->route('actors.index')->with('success', 'Színész sikeresen törölve.');
-        } catch (\Exception $e) {
-            return redirect()->route('actors.index')->with('error', 'Hiba az API hívás során: ' . $e->getMessage());
+        if (!$this->isAuthenticated()) {
+            return redirect()->route('actors.index')->with('error', 'Az adatmódosításhoz be kell jelentkezni.');
         }
+
+        $response = Http::api()->withToken($this->token)->delete("actors/{$id}");
+
+        if ($response->failed()) {
+            return redirect()->route('actors.index')->with('error', $response->json('message') ?? 'Nem sikerült törölni.');
+        }
+
+        return redirect()->route('actors.index')->with('success', 'Színész sikeresen törölve.');
     }
 
-    /**
-     * CSV export (auth middleware védi)
-     */
-    public function exportCsv()
+    public function exportCsv(): StreamedResponse
     {
-        try {
-            $response = Http::api()->get('/actors');
+        $response = Http::api()->get('actors');
+        if ($response->failed()) {
+            return redirect()->route('actors.index')->with('error', 'Nem sikerült exportálni.');
+        }
 
-            if ($response->failed()) {
-                return redirect()->route('actors.index')->with('error', 'Nem sikerült exportálni a színészeket.');
+        // ✅ wrapperből a listát!
+        $actors = $response->json('actors') ?? [];
+
+        $headers = [
+            'Content-Type'        => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="actors.csv"',
+        ];
+
+        $callback = function () use ($actors) {
+            $handle = fopen('php://output', 'w');
+            fprintf($handle, chr(0xEF) . chr(0xBB) . chr(0xBF));
+
+            fputcsv($handle, ['ID', 'Name', 'Birth date', 'Gender', 'Description']);
+
+            foreach ($actors as $a) {
+                fputcsv($handle, [
+                    $a['id'] ?? '',
+                    $a['name'] ?? '',
+                    $a['birth_date'] ?? '',
+                    $a['gender'] ?? '',
+                    $a['description'] ?? '',
+                ]);
             }
 
-            $actors = $response->json() ?? [];
+            fclose($handle);
+        };
 
-            $headers = [
-                'Content-Type'        => 'text/csv; charset=UTF-8',
-                'Content-Disposition' => 'attachment; filename="actors.csv"',
-            ];
-
-            $callback = function () use ($actors) {
-                $handle = fopen('php://output', 'w');
-
-                // Excel miatt BOM (opcionális, de hasznos)
-                fprintf($handle, chr(0xEF) . chr(0xBB) . chr(0xBF));
-
-                fputcsv($handle, ['ID', 'Name', 'Birth date', 'Gender', 'Description']);
-
-                foreach ($actors as $actor) {
-                    fputcsv($handle, [
-                        $actor['id'] ?? '',
-                        $actor['name'] ?? '',
-                        $actor['birth_date'] ?? '',
-                        $actor['gender'] ?? '',
-                        $actor['description'] ?? '',
-                    ]);
-                }
-
-                fclose($handle);
-            };
-
-            return response()->stream($callback, 200, $headers);
-        } catch (\Exception $e) {
-            return redirect()->route('actors.index')->with('error', 'Hiba az exportálás során: ' . $e->getMessage());
-        }
+        return response()->stream($callback, 200, $headers);
     }
 
-    /**
-     * PDF export (auth middleware védi)
-     */
     public function exportPdf()
     {
-        try {
-            $response = Http::api()->get('/actors');
-
-            if ($response->failed()) {
-                return redirect()->route('actors.index')->with('error', 'Nem sikerült exportálni a színészeket PDF-be.');
-            }
-
-            $actors = $response->json() ?? [];
-
-            $pdf = Pdf::loadView('exports.actors_pdf', [
-                'actors' => $actors,
-            ]);
-
-            return $pdf->download('actors.pdf');
-        } catch (\Exception $e) {
-            return redirect()->route('actors.index')->with('error', 'Hiba a PDF készítésekor: ' . $e->getMessage());
+        $response = Http::api()->get('actors');
+        if ($response->failed()) {
+            return redirect()->route('actors.index')->with('error', 'Nem sikerült exportálni PDF-be.');
         }
+
+        // ✅ wrapperből a listát!
+        $actors = $response->json('actors') ?? [];
+
+        $pdf = Pdf::loadView('exports.actors_pdf', [
+            'actors' => $actors,
+        ]);
+
+        return $pdf->download('actors.pdf');
     }
 }

@@ -26,7 +26,7 @@ class CategoryController extends Controller
                 return back()->with('error', $message);
             }
 
-            $categories = $response->json() ?? [];
+            $categories = $response->json('categories') ?? [];
 
             return view('categories.index', [
                 'categories'      => $categories,
@@ -68,15 +68,14 @@ class CategoryController extends Controller
     public function edit($id)
     {
         try {
-            // nincs show endpoint? akkor listából keressük
             $response = Http::api()->get('categories');
 
             if ($response->failed()) {
                 return redirect()->route('categories.index')->with('error', 'Nem sikerült lekérdezni a kategóriákat.');
             }
 
-            $categories = $response->json() ?? [];
-            $category = collect($categories)->firstWhere('id', (int)$id);
+            $categories = $response->json('categories') ?? [];
+            $category = collect($categories)->firstWhere('id', (int) $id);
 
             if (!$category) {
                 return redirect()->route('categories.index')->with('error', 'A megadott kategória nem található.');
@@ -97,11 +96,10 @@ class CategoryController extends Controller
         ]);
 
         try {
-            // API-dban update PUT-ot használ? te döntöd el
-            // nálad: CategoryController-ben PUT volt, de ha PATCH route-od van, akkor patch()
+            // route: PATCH categories/{id}
             $response = Http::api()
                 ->withToken($this->token)
-                ->put("categories/{$id}", $validated);
+                ->patch("categories/{$id}", $validated);
 
             if ($response->failed()) {
                 $message = $response->json('message') ?? 'Nem sikerült frissíteni a kategóriát.';
@@ -141,15 +139,19 @@ class CategoryController extends Controller
                 return redirect()->route('categories.index')->with('error', 'Nem sikerült exportálni CSV-be.');
             }
 
-            $categories = $response->json() ?? [];
+            $categories = $response->json('categories') ?? [];
 
             $headers = [
-                'Content-Type'        => 'text/csv',
+                'Content-Type'        => 'text/csv; charset=UTF-8',
                 'Content-Disposition' => 'attachment; filename="categories.csv"',
             ];
 
             $callback = function () use ($categories) {
                 $handle = fopen('php://output', 'w');
+
+                // UTF-8 BOM Excel miatt
+                fprintf($handle, chr(0xEF) . chr(0xBB) . chr(0xBF));
+
                 fputcsv($handle, ['ID', 'Name']);
 
                 foreach ($categories as $c) {
@@ -177,7 +179,7 @@ class CategoryController extends Controller
                 return redirect()->route('categories.index')->with('error', 'Nem sikerült exportálni PDF-be.');
             }
 
-            $categories = $response->json() ?? [];
+            $categories = $response->json('categories') ?? [];
 
             $pdf = Pdf::loadView('exports.categories_pdf', [
                 'categories' => $categories,
